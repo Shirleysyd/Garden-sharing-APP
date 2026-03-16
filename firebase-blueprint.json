@@ -1,0 +1,81 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Public profile information for a user.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The unique identifier for the user." },
+        "displayName": { "type": "string", "description": "The user's display name." },
+        "photoURL": { "type": "string", "description": "The user's profile picture URL." },
+        "bio": { "type": "string", "description": "A short biography about the user." },
+        "followersCount": { "type": "integer", "description": "Number of followers." },
+        "followingCount": { "type": "integer", "description": "Number of users followed." }
+      },
+      "required": ["uid", "displayName"]
+    },
+    "Post": {
+      "title": "Garden Post",
+      "description": "A post sharing a garden or plant.",
+      "type": "object",
+      "properties": {
+        "authorUid": { "type": "string", "description": "UID of the post creator." },
+        "authorName": { "type": "string", "description": "Display name of the author." },
+        "authorPhoto": { "type": "string", "description": "Photo URL of the author." },
+        "title": { "type": "string", "description": "Title of the post." },
+        "description": { "type": "string", "description": "Description of the garden/plant." },
+        "gardenType": { "type": "string", "description": "Type of garden (e.g., Indoor, Backyard)." },
+        "plantType": { "type": "string", "description": "Main plant type." },
+        "growingTips": { "type": "string", "description": "Tips for growing." },
+        "images": { "type": "array", "items": { "type": "string" }, "description": "List of image URLs." },
+        "waterCount": { "type": "integer", "description": "Number of 'waters' received." },
+        "commentCount": { "type": "integer", "description": "Number of comments." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp of creation." }
+      },
+      "required": ["authorUid", "title", "description", "createdAt"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "A comment on a garden post.",
+      "type": "object",
+      "properties": {
+        "postId": { "type": "string", "description": "ID of the post being commented on." },
+        "authorUid": { "type": "string", "description": "UID of the commenter." },
+        "authorName": { "type": "string", "description": "Name of the commenter." },
+        "authorPhoto": { "type": "string", "description": "Photo of the commenter." },
+        "text": { "type": "string", "description": "The comment text." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp of creation." }
+      },
+      "required": ["postId", "authorUid", "text", "createdAt"]
+    },
+    "Water": {
+      "title": "Water Interaction",
+      "description": "Represents a user 'watering' a post (like).",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "UID of the user who watered." },
+        "postId": { "type": "string", "description": "ID of the post watered." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp." }
+      },
+      "required": ["userId", "postId", "createdAt"]
+    },
+    "Follow": {
+      "title": "Follow Relationship",
+      "description": "Represents a user following another user.",
+      "type": "object",
+      "properties": {
+        "followerId": { "type": "string", "description": "UID of the follower." },
+        "followingId": { "type": "string", "description": "UID of the user being followed." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp." }
+      },
+      "required": ["followerId", "followingId", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": "User", "description": "User profile documents." },
+    "/posts/{postId}": { "schema": "Post", "description": "Garden posts." },
+    "/posts/{postId}/comments/{commentId}": { "schema": "Comment", "description": "Comments on a post." },
+    "/waters/{waterId}": { "schema": "Water", "description": "Water interactions (ID is userId_postId)." },
+    "/follows/{followId}": { "schema": "Follow", "description": "Follow relationships (ID is followerId_followingId)." }
+  }
+}

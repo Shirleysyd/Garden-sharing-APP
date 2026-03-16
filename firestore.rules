@@ -1,0 +1,152 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Fields: uid, displayName, photoURL, bio, followersCount, followingCount
+    //
+    // Collection: posts
+    // Fields: authorUid, authorName, authorPhoto, title, description, gardenType, plantType, growingTips, images, waterCount, commentCount, createdAt
+    //
+    // Collection: posts/{postId}/comments
+    // Fields: postId, authorUid, authorName, authorPhoto, text, createdAt
+    //
+    // Collection: waters
+    // Fields: userId, postId, createdAt
+    //
+    // Collection: follows
+    // Fields: followerId, followingId, createdAt
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "shuhuanyusyd@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'displayName']) &&
+             data.keys().hasOnly(['uid', 'displayName', 'photoURL', 'bio', 'followersCount', 'followingCount', 'role']) &&
+             data.uid is string && data.uid.size() < 100 &&
+             data.displayName is string && data.displayName.size() > 0 && data.displayName.size() < 100 &&
+             (!('bio' in data) || (data.bio is string && data.bio.size() < 500)) &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() < 1000)) &&
+             (!('followersCount' in data) || data.followersCount is int) &&
+             (!('followingCount' in data) || data.followingCount is int) &&
+             (!('role' in data) || (data.role is string && data.role in ['admin', 'user']));
+    }
+
+    function isValidPost(data) {
+      return data.keys().hasAll(['authorUid', 'title', 'description', 'createdAt']) &&
+             data.keys().hasOnly(['authorUid', 'authorName', 'authorPhoto', 'title', 'description', 'gardenType', 'plantType', 'growingTips', 'images', 'waterCount', 'commentCount', 'createdAt']) &&
+             data.authorUid == request.auth.uid &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.description is string && data.description.size() < 2000 &&
+             data.createdAt is timestamp &&
+             (!('authorName' in data) || (data.authorName is string && data.authorName.size() < 100)) &&
+             (!('authorPhoto' in data) || (data.authorPhoto is string && data.authorPhoto.size() < 1000)) &&
+             (!('gardenType' in data) || (data.gardenType is string && data.gardenType.size() < 100)) &&
+             (!('plantType' in data) || (data.plantType is string && data.plantType.size() < 100)) &&
+             (!('growingTips' in data) || (data.growingTips is string && data.growingTips.size() < 1000)) &&
+             (!('images' in data) || (data.images is list && data.images.size() <= 10)) &&
+             (!('waterCount' in data) || data.waterCount is int) &&
+             (!('commentCount' in data) || data.commentCount is int);
+    }
+
+    function isValidComment(data) {
+      return data.keys().hasAll(['postId', 'authorUid', 'text', 'createdAt']) &&
+             data.authorUid == request.auth.uid &&
+             data.text is string && data.text.size() > 0 && data.text.size() < 1000 &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidWater(data) {
+      return data.keys().hasAll(['userId', 'postId', 'createdAt']) &&
+             data.userId == request.auth.uid &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidFollow(data) {
+      return data.keys().hasAll(['followerId', 'followingId', 'createdAt']) &&
+             data.followerId == request.auth.uid &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && 
+                      (!('role' in request.resource.data) || request.resource.data.role == 'user');
+      allow update: if isValidUser(request.resource.data) && 
+                      ((isOwner(userId) && 
+                        request.resource.data.uid == resource.data.uid &&
+                        (!('role' in request.resource.data) || request.resource.data.role == resource.data.role)
+                       ) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /posts/{postId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidPost(request.resource.data) &&
+                      request.resource.data.waterCount == 0 &&
+                      request.resource.data.commentCount == 0;
+      allow update: if isValidPost(request.resource.data) &&
+                      ((isOwner(resource.data.authorUid) && 
+                        request.resource.data.authorUid == resource.data.authorUid &&
+                        request.resource.data.createdAt == resource.data.createdAt &&
+                        request.resource.data.waterCount == resource.data.waterCount &&
+                        request.resource.data.commentCount == resource.data.commentCount
+                       ) || 
+                       (isAuthenticated() && 
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['waterCount']) &&
+                        math.abs(request.resource.data.waterCount - resource.data.waterCount) == 1
+                       ) ||
+                       (isAuthenticated() && 
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount']) &&
+                        math.abs(request.resource.data.commentCount - resource.data.commentCount) == 1
+                       ) ||
+                       isAdmin());
+      allow delete: if isOwner(resource.data.authorUid) || isAdmin();
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isAuthenticated() && isValidComment(request.resource.data);
+        allow delete: if isOwner(resource.data.authorUid) || isAdmin();
+      }
+    }
+
+    match /waters/{waterId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidWater(request.resource.data) && waterId == request.auth.uid + "_" + request.resource.data.postId;
+      allow delete: if isOwner(resource.data.userId) || isAdmin();
+    }
+
+    match /follows/{followId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidFollow(request.resource.data) && followId == request.auth.uid + "_" + request.resource.data.followingId;
+      allow delete: if isOwner(resource.data.followerId) || isAdmin();
+    }
+
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}
